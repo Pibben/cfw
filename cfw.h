@@ -13,7 +13,7 @@
 #include <thread>
 
 #define OS_UNIX 1
-#define OSmWindowS 2
+#define OS_WINDOWS 2
 
 //TODO: Test cygwin/mingw
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
@@ -22,7 +22,7 @@
 #define USE_XSHM 1   // Link width -lXext
 
 #elif defined(_MSC_VER) || defined(_WIN32)
-#define OS_TYPE OSmWindowS
+#define OS_TYPE OS_WINDOWS
 #else
 #error Unknown OS
 #endif
@@ -40,7 +40,7 @@
 #include <X11/extensions/XShm.h>
 #endif
 
-#elif OS_TYPE==OSmWindowS
+#elif OS_TYPE==OS_WINDOWS
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -70,7 +70,7 @@ inline void sleep(const unsigned int milliseconds) {
   tv.tv_sec = milliseconds / 1000;
   tv.tv_nsec = (milliseconds % 1000) * 1000000;
   nanosleep(&tv, 0);
-#elif OS_TYPE==OSmWindowS
+#elif OS_TYPE==OS_WINDOWS
   Sleep(milliseconds);
 #endif
 }
@@ -106,7 +106,7 @@ private: //common
     XK_KP_0, XK_KP_1, XK_KP_2, XK_KP_3, XK_KP_4, XK_KP_5, XK_KP_6, XK_KP_7, XK_KP_8, XK_KP_9, XK_KP_Add, XK_KP_Subtract, XK_KP_Multiply, XK_KP_Divide
   };
 
-#elif OS_TYPE==OSmWindowS
+#elif OS_TYPE==OS_WINDOWS
   static constexpr unsigned int keyCodes[] = {
     VK_ESCAPE, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_PAUSE,
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', VK_BACK, VK_INSERT, VK_HOME, VK_PRIOR,
@@ -560,7 +560,7 @@ private: //UNIX
       mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0, (char*)mData, mDataWidth, mDataHeight, 8, 0);
     }
 
-    mWindowAtom = XInternAtom(dpy, "WM_DELETEmWindow", 0);
+    mWindowAtom = XInternAtom(dpy, "WM_DELETE_WINDOW", 0);
     mProtocolAtom = XInternAtom(dpy, "WM_PROTOCOLS", 0);
     XSetWMProtocols(dpy, mWindow, &mWindowAtom, 1);
 
@@ -659,7 +659,7 @@ public: ///UNIX
   }
 
 private: //WINDOWS
-#elif OS_TYPE==OSmWindowS
+#elif OS_TYPE==OS_WINDOWS
 
   bool mMouseIsTracked;
   HANDLE mmEventThreadHandle;
