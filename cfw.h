@@ -199,7 +199,6 @@ private: //UNIX
   public:
     std::thread mEventThread;
     std::mutex mSetupMutex;
-    std::mutex mDisplayMutex;
     std::set<Window*> mWins;
     Display *mDisplay;
     unsigned int mBitDepth;
@@ -214,9 +213,7 @@ private: //UNIX
       mIsBGR(false),
       mShmEnabled(false),
       mIsBigEndian(false) {
-#ifdef __FreeBSD__
       XInitThreads();
-#endif
     }
 
     ~X11Globals() {
@@ -246,18 +243,14 @@ private: //UNIX
       }
     } break;
     case ConfigureNotify: {
-      x11.mDisplayMutex.lock();
       while (XCheckWindowEvent(dpy, mWindow, StructureNotifyMask, &event)) {}
-      x11.mDisplayMutex.unlock();
       const int nx = event.xconfigure.x, ny = event.xconfigure.y;
       if (nx != mWindowPosX || ny != mWindowPosY) {
         mWindowPosX = nx; mWindowPosY = ny;
       }
     } break;
     case Expose: {
-      x11.mDisplayMutex.lock();
       while (XCheckWindowEvent(dpy, mWindow, ExposureMask, &event)) {}
-      x11.mDisplayMutex.unlock();
 
       // Paint
       if (mIsHidden || !mXImage) return;
@@ -284,9 +277,7 @@ private: //UNIX
         case 3: setMouseButtonState(2); break;
         case 2: setMouseButtonState(3); break;
         }
-        x11.mDisplayMutex.lock();
         haveMoreEvents = XCheckWindowEvent(dpy, mWindow, ButtonPressMask, &event);
-        x11.mDisplayMutex.unlock();
       } while (haveMoreEvents);
       dispatchMouseCallback();
     } break;
@@ -305,9 +296,7 @@ private: //UNIX
         case 4: setMouseWheelState(1); break;
         case 5: setMouseWheelState(-1); break;
         }
-        x11.mDisplayMutex.lock();
         haveMoreEvents = XCheckWindowEvent(dpy, mWindow, ButtonReleaseMask, &event);
-        x11.mDisplayMutex.unlock();
       } while (haveMoreEvents);
       dispatchMouseCallback();
     } break;
@@ -328,25 +317,19 @@ private: //UNIX
       }
     } break;
     case EnterNotify: {
-      x11.mDisplayMutex.lock();
       while (XCheckWindowEvent(dpy, mWindow, EnterWindowMask, &event)) {}
-      x11.mDisplayMutex.unlock();
       mMousePosX = event.xmotion.x;
       mMousePosY = event.xmotion.y;
       if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= (int)mDataWidth || mMousePosY >= (int)mDataHeight) mMousePosX = mMousePosY = -1;
       dispatchMouseCallback();
     } break;
     case LeaveNotify: {
-      x11.mDisplayMutex.lock();
       while (XCheckWindowEvent(dpy, mWindow, LeaveWindowMask, &event)) {}
-      x11.mDisplayMutex.unlock();
       mMousePosX = mMousePosY = -1;
       dispatchMouseCallback();
     } break;
     case MotionNotify: {
-      x11.mDisplayMutex.lock();
       while (XCheckWindowEvent(dpy, mWindow, PointerMotionMask, &event)) {}
-      x11.mDisplayMutex.unlock();
       mMousePosX = event.xmotion.x;
       mMousePosY = event.xmotion.y;
       if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= (int)mDataWidth || mMousePosY >= (int)mDataHeight) mMousePosX = mMousePosY = -1;
@@ -360,13 +343,11 @@ private: //UNIX
     XEvent event;
 
     for (; ; ) {
-      x11.mDisplayMutex.lock();
       bool event_flag = XCheckTypedEvent(dpy, ClientMessage, &event);
       if (!event_flag) event_flag = XCheckMaskEvent(dpy,
         ExposureMask | StructureNotifyMask | ButtonPressMask |
         KeyPressMask | PointerMotionMask | EnterWindowMask |
         LeaveWindowMask | ButtonReleaseMask | KeyReleaseMask, &event);
-      x11.mDisplayMutex.unlock();
       if (event_flag) {
         for (auto win : x11.mWins) {
           if (!win->mIsHidden && event.xany.window == win->mWindow) {
@@ -413,7 +394,6 @@ private: //UNIX
 
   void destructImpl() {
     Display *const dpy = x11.mDisplay;
-    x11.mDisplayMutex.lock();
 
     auto iter = std::find_if(x11.mWins.begin(), x11.mWins.end(), [this](Window* w) { return w == this; });
     assert(iter != x11.mWins.end());
@@ -435,8 +415,6 @@ private: //UNIX
       XDestroyImage(mXImage);
     mData = 0; mXImage = 0;
     XSync(dpy, 0);
-
-    x11.mDisplayMutex.unlock();
 
     delete[] mWindowTitle;
     mDataWidth = mDataHeight = mWindowWidth = mWindowHeight = 0;
@@ -481,10 +459,7 @@ private: //UNIX
       x11.mIsBigEndian = ImageByteOrder(dpy);
       XFree(vinfo);
 
-      x11.mDisplayMutex.lock();
       x11.mEventThread = std::thread(eventThread);
-    } else {
-      x11.mDisplayMutex.lock();
     }
 
     mDataWidth = std::min(dimw, (unsigned int)DisplayWidth(dpy, DefaultScreen(dpy)));
@@ -566,7 +541,6 @@ private: //UNIX
 
     x11.mWins.insert(this);
     if (!mIsHidden) mapWindow(); else { mWindowPosX = mWindowPosY = std::numeric_limits<int>::min(); }
-    x11.mDisplayMutex.unlock();
     x11.mSetupMutex.unlock();
 
     assert(x11.mBitDepth == 24);
@@ -583,22 +557,18 @@ private: //UNIX
 public: ///UNIX
   void show() {
     if (!mIsHidden) return;
-    x11.mDisplayMutex.lock();
     mapWindow();
     mIsHidden = false;
-    x11.mDisplayMutex.unlock();
     paint();
   }
 
   void hide() {
     if (mIsHidden) return;
     Display *const dpy = x11.mDisplay;
-    x11.mDisplayMutex.lock();
     XUnmapWindow(dpy, mWindow);
     mWindowPosX = mWindowPosY = -1;
     mIsHidden = true;
     dispatchCloseCallback();
-    x11.mDisplayMutex.unlock();
     return;
   }
 
@@ -606,10 +576,8 @@ public: ///UNIX
     if (mWindowPosX != posx || mWindowPosY != posy) {
       show();
       Display *const dpy = x11.mDisplay;
-      x11.mDisplayMutex.lock();
       XMoveWindow(dpy, mWindow, posx, posy);
       mWindowPosX = posx; mWindowPosY = posy;
-      x11.mDisplayMutex.unlock();
     }
     paint();
   }
@@ -620,23 +588,18 @@ public: ///UNIX
     mWindowTitle = new char[size];
     std::memcpy(mWindowTitle, title.c_str(), size);
     Display *const dpy = x11.mDisplay;
-    x11.mDisplayMutex.lock();
     XStoreName(dpy,mWindow, mWindowTitle);
-    x11.mDisplayMutex.unlock();
   }
 
   void paint() {
     if (mIsHidden || !mXImage) return;
     Display *const dpy = x11.mDisplay;
-    x11.mDisplayMutex.lock();
     XClearArea(dpy, mWindow, 0, 0, 1, 1, true); //Force repaint via Expose event
-    x11.mDisplayMutex.unlock();
     return;
   }
 
   void render(const unsigned char* data, int width, int height) {
     assert(!x11.mIsBGR);
-    x11.mDisplayMutex.lock();
     uint32_t* ndata = (unsigned int*)mData;
 
     assert(sizeof(int) == 4);
@@ -654,7 +617,6 @@ public: ///UNIX
       }
     }
 
-    x11.mDisplayMutex.unlock();
     return;
   }
 
