@@ -49,6 +49,7 @@
 namespace cfw {
 
 enum class Keys {
+//clang-format off
   ESC, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, PAUSE,
   _1, _2, _3, _4, _5, _6, _7, _8, _9, _0, BACKSPACE, INSERT, HOME, PAGEUP,
   TAB, Q, W, E, R, T, Y, U, I, O, P, _DELETE, END, PAGEDOWN, CAPSLOCK,
@@ -58,6 +59,7 @@ enum class Keys {
   PAD0, PAD1, PAD2, PAD3, PAD4, PAD5, PAD6, PAD7, PAD8, PAD9, PADADD, PADSUB, PADMUL, PADDIV,
 
   NUM_KEYS
+//clang-format on
 };
 
 inline void sleep(const unsigned int milliseconds) {
@@ -93,6 +95,7 @@ private: //common
 
 #if OS_TYPE==OS_UNIX
   static constexpr unsigned int keyCodes[] = {
+//clang-format off
     XK_Escape, XK_F1, XK_F2, XK_F3, XK_F4, XK_F5, XK_F6, XK_F7, XK_F8, XK_F9, XK_F10, XK_F11, XK_F12, XK_Pause,
     XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9, XK_0, XK_BackSpace, XK_Insert, XK_Home, XK_Page_Up,
     XK_Tab, XK_q, XK_w, XK_e, XK_r, XK_t, XK_y, XK_u, XK_i, XK_o, XK_p, XK_Delete, XK_End, XK_Page_Down,
@@ -100,10 +103,12 @@ private: //common
     XK_Shift_L, XK_z, XK_x, XK_c, XK_v, XK_b, XK_n, XK_m, XK_Shift_R, XK_Up,
     XK_Control_L, XK_Super_L, XK_Alt_L, XK_space, XK_Alt_R, XK_Super_R, XK_Menu, XK_Control_R, XK_Left, XK_Down, XK_Right,
     XK_KP_0, XK_KP_1, XK_KP_2, XK_KP_3, XK_KP_4, XK_KP_5, XK_KP_6, XK_KP_7, XK_KP_8, XK_KP_9, XK_KP_Add, XK_KP_Subtract, XK_KP_Multiply, XK_KP_Divide
+//clang-format on
   };
 
 #elif OS_TYPE==OS_WINDOWS
   static constexpr unsigned int keyCodes[] = {
+//clang-format off
     VK_ESCAPE, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_PAUSE,
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', VK_BACK, VK_INSERT, VK_HOME, VK_PRIOR,
     VK_TAB, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', VK_DELETE, VK_END, VK_NEXT,
@@ -111,6 +116,7 @@ private: //common
     VK_SHIFT, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', VK_SHIFT, VK_UP,
     VK_CONTROL, VK_LWIN, VK_LMENU, VK_SPACE, VK_CONTROL, VK_RWIN, VK_APPS, VK_CONTROL, VK_LEFT, VK_DOWN, VK_RIGHT,
     0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, VK_ADD, VK_SUBTRACT, VK_MULTIPLY, VK_DIVIDE
+//clang-format on
   };
 
 #endif
