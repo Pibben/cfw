@@ -254,7 +254,6 @@ private: //UNIX
 
       // Paint
       if (mIsHidden || !mXImage) return;
-      Display *const dpy = x11.mDisplay;
 
       GC gc = DefaultGC(dpy, DefaultScreen(dpy));
 #ifdef USE_XSHM
@@ -343,7 +342,7 @@ private: //UNIX
     XEvent event;
 
     for (; ; ) {
-      bool event_flag = XCheckTypedEvent(dpy, ClientMessage, &event);
+      int event_flag = XCheckTypedEvent(dpy, ClientMessage, &event);
       if (!event_flag) event_flag = XCheckMaskEvent(dpy,
         ExposureMask | StructureNotifyMask | ButtonPressMask |
         KeyPressMask | PointerMotionMask | EnterWindowMask |
