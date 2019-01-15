@@ -248,7 +248,8 @@ private: //UNIX
       while (XCheckWindowEvent(dpy, mWindow, ExposureMask, &event)) {}
 
       // Paint
-      if (mIsHidden || !mXImage) return;
+      if (mIsHidden || !mXImage) { return;
+}
 
       GC gc = DefaultGC(dpy, DefaultScreen(dpy));
 
@@ -335,10 +336,11 @@ private: //UNIX
 
     for (; ; ) {
       int event_flag = XCheckTypedEvent(dpy, ClientMessage, &event);
-      if (!event_flag) event_flag = XCheckMaskEvent(dpy,
+      if (!event_flag) { event_flag = XCheckMaskEvent(dpy,
         ExposureMask | StructureNotifyMask | ButtonPressMask |
         KeyPressMask | PointerMotionMask | EnterWindowMask |
         LeaveWindowMask | ButtonReleaseMask | KeyReleaseMask, &event);
+}
       if (event_flag) {
         for (auto win : x11.mWins) {
           if (!win->mIsHidden && event.xany.window == win->mWindow) {
@@ -401,8 +403,9 @@ private: //UNIX
       delete mShmInfo;
       mShmInfo = 0;
     }
-    else
+    else {
       XDestroyImage(mXImage);
+}
     mData = 0; mXImage = 0;
     XSync(dpy, 0);
 
@@ -417,12 +420,13 @@ private: //UNIX
   }
 
   void constructImpl(const unsigned int dimw, const unsigned int dimh, const char *const title = 0) {
-    if (!dimw || !dimh) return destructImpl();
+    if (!dimw || !dimh) { return destructImpl();
+}
 
     const char *const nptitle = title ? title : "";
     const unsigned int s = (unsigned int)std::strlen(nptitle) + 1;
     char *const tmp_title = s ? new char[s] : 0;
-    if (s) std::memcpy(tmp_title, nptitle, s * sizeof(char));
+    if (s) { std::memcpy(tmp_title, nptitle, s * sizeof(char)); }
 
     x11.mSetupMutex.lock();
 
@@ -445,7 +449,8 @@ private: //UNIX
       vtemplate.visualid = XVisualIDFromVisual(DefaultVisual(dpy, DefaultScreen(dpy)));
       int nb_visuals;
       XVisualInfo *vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals);
-      if (vinfo && vinfo->red_mask < vinfo->blue_mask) x11.mIsBGR = true;
+      if (vinfo && vinfo->red_mask < vinfo->blue_mask) { x11.mIsBGR = true;
+}
       x11.mIsBigEndian = ImageByteOrder(dpy);
       XFree(vinfo);
 
@@ -528,7 +533,7 @@ private: //UNIX
     XSetWMProtocols(dpy, mWindow, &mWindowAtom, 1);
 
     x11.mWins.insert(this);
-    if (!mIsHidden) mapWindow(); else { mWindowPosX = mWindowPosY = std::numeric_limits<int>::min(); }
+    if (!mIsHidden) { mapWindow(); } else { mWindowPosX = mWindowPosY = std::numeric_limits<int>::min(); }
     x11.mSetupMutex.unlock();
 
     assert(x11.mBitDepth == 24);
@@ -544,14 +549,16 @@ private: //UNIX
 
 public: ///UNIX
   void show() {
-    if (!mIsHidden) return;
+    if (!mIsHidden) { return;
+}
     mapWindow();
     mIsHidden = false;
     paint();
   }
 
   void hide() {
-    if (mIsHidden) return;
+    if (mIsHidden) { return;
+}
     Display *const dpy = x11.mDisplay;
     XUnmapWindow(dpy, mWindow);
     mWindowPosX = mWindowPosY = -1;
@@ -580,7 +587,8 @@ public: ///UNIX
   }
 
   void paint() {
-    if (mIsHidden || !mXImage) return;
+    if (mIsHidden || !mXImage) { return;
+}
     Display *const dpy = x11.mDisplay;
     XClearArea(dpy, mWindow, 0, 0, 1, 1, true); //Force repaint via Expose event
     return;
