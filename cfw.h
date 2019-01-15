@@ -19,8 +19,6 @@
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 #define OS_TYPE OS_UNIX
 
-#define USE_XSHM 1   // Link width -lXext
-
 #elif defined(_MSC_VER) || defined(_WIN32)
 #define OS_TYPE OS_WINDOWS
 #else
@@ -34,11 +32,9 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
-#ifdef USE_XSHM
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <X11/extensions/XShm.h>
-#endif
 
 #elif OS_TYPE==OS_WINDOWS
 #ifndef NOMINMAX
@@ -229,9 +225,8 @@ private: //UNIX
   ::Window mWindow;
   XImage *mXImage;
   uint32_t *mData;
-#ifdef USE_XSHM
   XShmSegmentInfo *mShmInfo;
-#endif
+
   void handleEvents(const XEvent *const pevent) {
     Display *const dpy = x11.mDisplay;
     XEvent event = *pevent;
@@ -256,15 +251,12 @@ private: //UNIX
       if (mIsHidden || !mXImage) return;
 
       GC gc = DefaultGC(dpy, DefaultScreen(dpy));
-#ifdef USE_XSHM
+
       if (mShmInfo) {
         XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
       } else {
         XPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight);
       }
-#else
-      XPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight);
-#endif
     } break;
     case ButtonPress: {
       bool haveMoreEvents = true;
@@ -400,7 +392,7 @@ private: //UNIX
 
     XDestroyWindow(dpy, mWindow);
     mWindow = 0;
-#ifdef USE_XSHM
+
     if (mShmInfo) {
       XShmDetach(dpy, mShmInfo);
       XDestroyImage(mXImage);
@@ -410,7 +402,6 @@ private: //UNIX
       mShmInfo = 0;
     }
     else
-#endif
       XDestroyImage(mXImage);
     mData = 0; mXImage = 0;
     XSync(dpy, 0);
@@ -485,7 +476,6 @@ private: //UNIX
     mWindowWidth = mDataWidth;
     mWindowHeight = mDataHeight;
 
-#ifdef USE_XSHM
     mShmInfo = 0;
     if (XShmQueryExtension(dpy)) {
       mShmInfo = new XShmSegmentInfo;
@@ -526,7 +516,6 @@ private: //UNIX
       }
     }
     if (!mShmInfo)
-#endif
     {
       assert(x11.mBitDepth == 24);
       const uint32_t buf_size = mDataWidth*mDataHeight*4;
