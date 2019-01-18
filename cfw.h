@@ -30,11 +30,11 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/XShm.h>
 #include <X11/keysym.h>
+#include <atomic>
+#include <set>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/time.h>
-#include <atomic>
-#include <set>
 
 #elif OS_TYPE == OS_WINDOWS
 #ifndef NOMINMAX
@@ -64,10 +64,10 @@ enum class Keys {
 
 inline void sleep(const unsigned int milliseconds) {
 #if OS_TYPE == OS_UNIX
-    struct timespec tv;
+    struct timespec tv{};
     tv.tv_sec = milliseconds / 1000;
     tv.tv_nsec = (milliseconds % 1000) * 1000000;
-    nanosleep(&tv, 0);
+    nanosleep(&tv, nullptr);
 #elif OS_TYPE == OS_WINDOWS
     Sleep(milliseconds);
 #endif
@@ -124,8 +124,8 @@ private:                 // common
 public:  // common
     ~Window() { destructImpl(); }
 
-    Window(const unsigned int width, const unsigned int height, const char* const title = 0)
-        : mWindowTitle(0),
+    Window(const unsigned int width, const unsigned int height, const char* const title = nullptr)
+        : mWindowTitle(nullptr),
           mDataWidth(0),
           mDataHeight(0),
           mWindowWidth(0),
@@ -196,20 +196,17 @@ private:  // UNIX
         std::thread mEventThread;
         std::mutex mSetupMutex;
         std::set<Window*> mWins;
-        Display* mDisplay;
-        unsigned int mBitDepth;
+        Display* mDisplay{nullptr};
+        unsigned int mBitDepth{0};
         std::atomic<bool> mThreadStopSemaphore;
-        bool mIsBGR;
-        bool mShmEnabled;
-        bool mIsBigEndian;
+        bool mIsBGR{false};
+        bool mShmEnabled{false};
+        bool mIsBigEndian{false};
 
         X11Globals()
-            : mDisplay(0),
-              mBitDepth(0),
-              mThreadStopSemaphore(false),
-              mIsBGR(false),
-              mShmEnabled(false),
-              mIsBigEndian(false) {
+            : 
+              mThreadStopSemaphore(false)
+              {
             XInitThreads();
         }
 
@@ -221,25 +218,25 @@ private:  // UNIX
 
     static X11Globals x11;
 
-    Atom mWindowAtom;
-    Atom mProtocolAtom;
-    ::Window mWindow;
-    XImage* mXImage;
-    uint32_t* mData;
-    XShmSegmentInfo* mShmInfo;
+    Atom mWindowAtom{};
+    Atom mProtocolAtom{};
+    ::Window mWindow{};
+    XImage* mXImage{};
+    uint32_t* mData{};
+    XShmSegmentInfo* mShmInfo{};
 
     void handleEvents(const XEvent* const pevent) {
         Display* const dpy = x11.mDisplay;
         XEvent event = *pevent;
         switch (event.type) {
             case ClientMessage: {
-                if ((int)event.xclient.message_type == (int)mProtocolAtom &&
-                    (int)event.xclient.data.l[0] == (int)mWindowAtom) {
+                if (static_cast<int>(event.xclient.message_type) == static_cast<int>(mProtocolAtom) &&
+                    static_cast<int>(event.xclient.data.l[0]) == static_cast<int>(mWindowAtom)) {
                     hide();
                 }
             } break;
             case ConfigureNotify: {
-                while (XCheckWindowEvent(dpy, mWindow, StructureNotifyMask, &event)) {
+                while (XCheckWindowEvent(dpy, mWindow, StructureNotifyMask, &event) != 0) {
                 }
                 const int nx = event.xconfigure.x, ny = event.xconfigure.y;
                 if (nx != mWindowPosX || ny != mWindowPosY) {
@@ -248,17 +245,17 @@ private:  // UNIX
                 }
             } break;
             case Expose: {
-                while (XCheckWindowEvent(dpy, mWindow, ExposureMask, &event)) {
+                while (XCheckWindowEvent(dpy, mWindow, ExposureMask, &event) != 0) {
                 }
 
                 // Paint
-                if (mIsHidden || !mXImage) {
+                if (mIsHidden || (mXImage == nullptr)) {
                     return;
                 }
 
                 GC gc = DefaultGC(dpy, DefaultScreen(dpy)); // NOLINT
 
-                if (mShmInfo) {
+                if (mShmInfo != nullptr) {
                     XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
                 } else {
                     XPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight);
@@ -269,8 +266,8 @@ private:  // UNIX
                 do {
                     mMousePosX = event.xmotion.x;
                     mMousePosY = event.xmotion.y;
-                    if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= (int)mDataWidth ||
-                        mMousePosY >= (int)mDataHeight) {
+                    if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= static_cast<int>(mDataWidth) ||
+                        mMousePosY >= static_cast<int>(mDataHeight)) {
                         mMousePosX = mMousePosY = -1;
                     }
                     switch (event.xbutton.button) {
@@ -284,7 +281,7 @@ private:  // UNIX
                             setMouseButtonState(3);
                             break;
                     }
-                    haveMoreEvents = XCheckWindowEvent(dpy, mWindow, ButtonPressMask, &event);
+                    haveMoreEvents = (XCheckWindowEvent(dpy, mWindow, ButtonPressMask, &event) != 0);
                 } while (haveMoreEvents);
                 dispatchMouseCallback();
             } break;
@@ -293,8 +290,8 @@ private:  // UNIX
                 do {
                     mMousePosX = event.xmotion.x;
                     mMousePosY = event.xmotion.y;
-                    if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= (int)mDataWidth ||
-                        mMousePosY >= (int)mDataHeight) {
+                    if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= static_cast<int>(mDataWidth) ||
+                        mMousePosY >= static_cast<int>(mDataHeight)) {
                         mMousePosX = -1;
                         mMousePosY = -1;
                     }
@@ -315,52 +312,52 @@ private:  // UNIX
                             setMouseWheelState(-1);
                             break;
                     }
-                    haveMoreEvents = XCheckWindowEvent(dpy, mWindow, ButtonReleaseMask, &event);
+                    haveMoreEvents = (XCheckWindowEvent(dpy, mWindow, ButtonReleaseMask, &event) != 0);
                 } while (haveMoreEvents);
                 dispatchMouseCallback();
             } break;
             case KeyPress: {
                 char tmp = 0;
                 KeySym ksym;
-                XLookupString(&event.xkey, &tmp, 1, &ksym, 0);
-                setKey((unsigned int)ksym, true);
+                XLookupString(&event.xkey, &tmp, 1, &ksym, nullptr);
+                setKey(static_cast<unsigned int>(ksym), true);
             } break;
             case KeyRelease: {
                 char keys_return[32];
                 XQueryKeymap(dpy, keys_return);
                 const unsigned int kc = event.xkey.keycode, kc1 = kc / 8, kc2 = kc % 8;
-                const bool is_key_pressed = kc1 >= 32 ? false : (keys_return[kc1] >> kc2) & 1;
+                const bool is_key_pressed = kc1 >= 32 ? false : ((keys_return[kc1] >> kc2) & 1) != 0;
                 if (!is_key_pressed) {
                     char tmp = 0;
                     KeySym ksym;
-                    XLookupString(&event.xkey, &tmp, 1, &ksym, 0);
-                    setKey((unsigned int)ksym, false);
+                    XLookupString(&event.xkey, &tmp, 1, &ksym, nullptr);
+                    setKey(static_cast<unsigned int>(ksym), false);
                 }
             } break;
             case EnterNotify: {
-                while (XCheckWindowEvent(dpy, mWindow, EnterWindowMask, &event)) {
+                while (XCheckWindowEvent(dpy, mWindow, EnterWindowMask, &event) != 0) {
                 }
                 mMousePosX = event.xmotion.x;
                 mMousePosY = event.xmotion.y;
-                if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= (int)mDataWidth ||
-                    mMousePosY >= (int)mDataHeight) {
+                if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= static_cast<int>(mDataWidth) ||
+                    mMousePosY >= static_cast<int>(mDataHeight)) {
                     mMousePosX = mMousePosY = -1;
                 }
                 dispatchMouseCallback();
             } break;
             case LeaveNotify: {
-                while (XCheckWindowEvent(dpy, mWindow, LeaveWindowMask, &event)) {
+                while (XCheckWindowEvent(dpy, mWindow, LeaveWindowMask, &event) != 0) {
                 }
                 mMousePosX = mMousePosY = -1;
                 dispatchMouseCallback();
             } break;
             case MotionNotify: {
-                while (XCheckWindowEvent(dpy, mWindow, PointerMotionMask, &event)) {
+                while (XCheckWindowEvent(dpy, mWindow, PointerMotionMask, &event) != 0) {
                 }
                 mMousePosX = event.xmotion.x;
                 mMousePosY = event.xmotion.y;
-                if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= (int)mDataWidth ||
-                    mMousePosY >= (int)mDataHeight) {
+                if (mMousePosX < 0 || mMousePosY < 0 || mMousePosX >= static_cast<int>(mDataWidth) ||
+                    mMousePosY >= static_cast<int>(mDataHeight)) {
                     mMousePosX = mMousePosY = -1;
                 }
                 dispatchMouseCallback();
@@ -374,14 +371,14 @@ private:  // UNIX
 
         for (;;) {
             int event_flag = XCheckTypedEvent(dpy, ClientMessage, &event);
-            if (!event_flag) {
+            if (event_flag == 0) {
                 event_flag = XCheckMaskEvent(dpy,
                                              ExposureMask | StructureNotifyMask | ButtonPressMask | KeyPressMask |
                                                  PointerMotionMask | EnterWindowMask | LeaveWindowMask |
                                                  ButtonReleaseMask | KeyReleaseMask,
                                              &event);
             }
-            if (event_flag) {
+            if (event_flag != 0) {
                 for (auto win : x11.mWins) {
                     if (!win->mIsHidden && event.xany.window == win->mWindow) {
                         win->handleEvents(&event);
@@ -393,7 +390,7 @@ private:  // UNIX
             }
             sleep(8);
         }
-        return 0;
+        return nullptr;
     }
 
     void mapWindow() {
@@ -441,48 +438,46 @@ private:  // UNIX
         XDestroyWindow(dpy, mWindow);
         mWindow = 0;
 
-        if (mShmInfo) {
+        if (mShmInfo != nullptr) {
             XShmDetach(dpy, mShmInfo);
             XDestroyImage(mXImage);
             shmdt(mShmInfo->shmaddr);
-            shmctl(mShmInfo->shmid, IPC_RMID, 0);
+            shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
             delete mShmInfo;
-            mShmInfo = 0;
+            mShmInfo = nullptr;
         } else {
             XDestroyImage(mXImage);
         }
-        mData = 0;
-        mXImage = 0;
+        mData = nullptr;
+        mXImage = nullptr;
         XSync(dpy, 0);
 
         delete[] mWindowTitle;
         mDataWidth = mDataHeight = mWindowWidth = mWindowHeight = 0;
         mWindowPosX = mWindowPosY = 0;
         mIsHidden = true;
-        mWindowTitle = 0;
+        mWindowTitle = nullptr;
         dispatchCloseCallback();
+   }
 
-        return;
-    }
-
-    void constructImpl(const unsigned int dimw, const unsigned int dimh, const char* const title = 0) {
-        if (!dimw || !dimh) {
+    void constructImpl(const unsigned int dimw, const unsigned int dimh, const char* const title = nullptr) {
+        if ((dimw == 0u) || (dimh == 0u)) {
             return destructImpl();
         }
 
-        const char* const nptitle = title ? title : "";
-        const unsigned int s = (unsigned int)std::strlen(nptitle) + 1;
-        char* const tmp_title = s ? new char[s] : 0;
-        if (s) {
+        const char* const nptitle = title != nullptr ? title : "";
+        const unsigned int s = static_cast<unsigned int>(std::strlen(nptitle)) + 1;
+        char* const tmp_title = s != 0u ? new char[s] : nullptr;
+        if (s != 0u) {
             std::memcpy(tmp_title, nptitle, s * sizeof(char));
         }
 
         x11.mSetupMutex.lock();
 
         Display*& dpy = x11.mDisplay;
-        if (!dpy) {
-            dpy = XOpenDisplay(0);
-            if (!dpy) {
+        if (dpy == nullptr) {
+            dpy = XOpenDisplay(nullptr);
+            if (dpy == nullptr) {
                 std::cerr << "Failed to open X11 display." << std::endl;
                 exit(1);
             }
@@ -500,7 +495,7 @@ private:  // UNIX
             vtemplate.visualid = XVisualIDFromVisual(DefaultVisual(dpy, DefaultScreen(dpy))); // NOLINT
             int nb_visuals;
             XVisualInfo* vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals); // NOLINT
-            if (vinfo && vinfo->red_mask < vinfo->blue_mask) {
+            if ((vinfo != nullptr) && vinfo->red_mask < vinfo->blue_mask) {
                 x11.mIsBGR = true;
             }
             x11.mIsBigEndian = ImageByteOrder(dpy); // NOLINT
@@ -521,7 +516,7 @@ private:  // UNIX
                      ExposureMask | StructureNotifyMask | ButtonPressMask | KeyPressMask | PointerMotionMask |
                          EnterWindowMask | LeaveWindowMask | ButtonReleaseMask | KeyReleaseMask);
 
-        XStoreName(dpy, mWindow, mWindowTitle ? mWindowTitle : " ");
+        XStoreName(dpy, mWindow, mWindowTitle != nullptr ? mWindowTitle : " ");
 
         static const char* const mWindow_class = "Fluffkiosk";
         XClassHint* const window_class = XAllocClassHint();
@@ -533,29 +528,29 @@ private:  // UNIX
         mWindowWidth = mDataWidth;
         mWindowHeight = mDataHeight;
 
-        mShmInfo = 0;
-        if (XShmQueryExtension(dpy)) {
+        mShmInfo = nullptr;
+        if (XShmQueryExtension(dpy) != 0) {
             mShmInfo = new XShmSegmentInfo;
-            mXImage = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0, mShmInfo,
+            mXImage = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr, mShmInfo,
                                       mDataWidth, mDataHeight);
-            if (!mXImage) {
+            if (mXImage == nullptr) {
                 delete mShmInfo;
-                mShmInfo = 0;
+                mShmInfo = nullptr;
             } else {
                 mShmInfo->shmid = shmget(IPC_PRIVATE, mXImage->bytes_per_line * mXImage->height, IPC_CREAT | 0777);
                 if (mShmInfo->shmid == -1) {
                     XDestroyImage(mXImage);
                     delete mShmInfo;
-                    mShmInfo = 0;
+                    mShmInfo = nullptr;
                 } else {
-                    mData = (uint32_t*)shmat(mShmInfo->shmid, 0, 0);
-                    mXImage->data = (char*)mData;
-                    mShmInfo->shmaddr = (char*)mData;
+                    mData = static_cast<uint32_t*>(shmat(mShmInfo->shmid, nullptr, 0));
+                    mXImage->data = reinterpret_cast<char*>(mData);
+                    mShmInfo->shmaddr = reinterpret_cast<char*>(mData);
                     if (mShmInfo->shmaddr == (char*)-1) {
-                        shmctl(mShmInfo->shmid, IPC_RMID, 0);
+                        shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                         XDestroyImage(mXImage);
                         delete mShmInfo;
-                        mShmInfo = 0;
+                        mShmInfo = nullptr;
                     } else {
                         mShmInfo->readOnly = 0;
                         x11.mShmEnabled = true;
@@ -565,20 +560,20 @@ private:  // UNIX
                         XSetErrorHandler(oldXErrorHandler);
                         if (!x11.mShmEnabled) {
                             shmdt(mShmInfo->shmaddr);
-                            shmctl(mShmInfo->shmid, IPC_RMID, 0);
+                            shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                             XDestroyImage(mXImage);
                             delete mShmInfo;
-                            mShmInfo = 0;
+                            mShmInfo = nullptr;
                         }
                     }
                 }
             }
         }
-        if (!mShmInfo) {
+        if (mShmInfo == nullptr) {
             assert(x11.mBitDepth == 24);
             const uint32_t buf_size = mDataWidth * mDataHeight * 4;
-            mData = (uint32_t*)std::malloc(buf_size);  // TODO: Don't use raw allocation
-            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0, (char*)mData,
+            mData = static_cast<uint32_t*>(std::malloc(buf_size));  // TODO: Don't use raw allocation
+            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0, reinterpret_cast<char*>(mData),
                                    mDataWidth, mDataHeight, 8, 0);
         }
 
@@ -601,7 +596,7 @@ private:  // UNIX
 
     static bool isBigEndian() {
         const int x = 1;
-        return ((unsigned char*)&x)[0] ? false : true;
+        return ((unsigned char*)&x)[0] != 0u ? false : true;
     }
 
 public:  /// UNIX
@@ -623,8 +618,7 @@ public:  /// UNIX
         mWindowPosX = mWindowPosY = -1;
         mIsHidden = true;
         dispatchCloseCallback();
-        return;
-    }
+   }
 
     void move(const int posx, const int posy) {
         if (mWindowPosX != posx || mWindowPosY != posy) {
@@ -647,38 +641,35 @@ public:  /// UNIX
     }
 
     void paint() {
-        if (mIsHidden || !mXImage) {
+        if (mIsHidden || (mXImage == nullptr)) {
             return;
         }
         Display* const dpy = x11.mDisplay;
         XClearArea(dpy, mWindow, 0, 0, 1, 1,
-                   true);  // Force repaint via Expose event
-        return;
-    }
+                   1);     }
 
     void render(const unsigned char* data, int width, int height) {
         assert(!x11.mIsBGR);
-        uint32_t* ndata = (unsigned int*)mData;
+        auto* ndata = static_cast<unsigned int*>(mData);
 
-        assert(sizeof(int) == 4);
+        static_assert(sizeof(int) == 4 );
         assert(x11.mBitDepth == 24);
 
         if (x11.mIsBigEndian == isBigEndian()) {
             for (int xy = width * height; xy > 0; --xy) {
                 *(ndata++) =
-                    ((unsigned char)*(data) << 16) | ((unsigned char)*(data + 1) << 8) | (unsigned char)*(data + 2);
+                    (*(data) << 16) | (*(data + 1) << 8) | *(data + 2);
                 data += 3;
             }
         } else {
             for (int xy = width * height; xy > 0; --xy) {
-                *(ndata++) = ((unsigned char)*(data) << 24) | ((unsigned char)*(data + 1) << 16) |
-                             ((unsigned char)*(data + 2) << 8);
+                *(ndata++) = (*(data) << 24) | (*(data + 1) << 16) |
+                             (*(data + 2) << 8);
                 data += 3;
             }
         }
 
-        return;
-    }
+           }
 
 private:  // WINDOWS
 #elif OS_TYPE == OS_WINDOWS

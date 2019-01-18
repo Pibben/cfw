@@ -1,7 +1,7 @@
-#include <vector>
 #include "cfw.h"
+#include <vector>
 
-int main(int argc,char **argv) {
+int main(int  /*argc*/,char ** /*argv*/) {
 
   std::vector<unsigned char> img1(1000 * 800 * 3);
   std::vector<unsigned char> img2(500 * 800 * 3);
