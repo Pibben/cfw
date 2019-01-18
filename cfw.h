@@ -256,7 +256,7 @@ private:  // UNIX
                     return;
                 }
 
-                GC gc = DefaultGC(dpy, DefaultScreen(dpy));
+                GC gc = DefaultGC(dpy, DefaultScreen(dpy)); // NOLINT
 
                 if (mShmInfo) {
                     XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
@@ -487,7 +487,7 @@ private:  // UNIX
                 exit(1);
             }
 
-            x11.mBitDepth = DefaultDepth(dpy, DefaultScreen(dpy));
+            x11.mBitDepth = DefaultDepth(dpy, DefaultScreen(dpy)); // NOLINT
             if (x11.mBitDepth != 8 && x11.mBitDepth != 16 && x11.mBitDepth != 24 && x11.mBitDepth != 32) {
                 std::cerr << "Invalid screen mode detected (only 8, 16, 24 and "
                              "32 bits "
@@ -497,25 +497,25 @@ private:  // UNIX
             }
 
             XVisualInfo vtemplate;
-            vtemplate.visualid = XVisualIDFromVisual(DefaultVisual(dpy, DefaultScreen(dpy)));
+            vtemplate.visualid = XVisualIDFromVisual(DefaultVisual(dpy, DefaultScreen(dpy))); // NOLINT
             int nb_visuals;
-            XVisualInfo* vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals);
+            XVisualInfo* vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals); // NOLINT
             if (vinfo && vinfo->red_mask < vinfo->blue_mask) {
                 x11.mIsBGR = true;
             }
-            x11.mIsBigEndian = ImageByteOrder(dpy);
+            x11.mIsBigEndian = ImageByteOrder(dpy); // NOLINT
             XFree(vinfo);
 
             x11.mEventThread = std::thread(eventThread);
         }
 
-        mDataWidth = std::min(dimw, (unsigned int)DisplayWidth(dpy, DefaultScreen(dpy)));
-        mDataHeight = std::min(dimh, (unsigned int)DisplayHeight(dpy, DefaultScreen(dpy)));
+        mDataWidth = std::min(dimw, static_cast<unsigned int>DisplayWidth(dpy, DefaultScreen(dpy))); // NOLINT
+        mDataHeight = std::min(dimh, static_cast<unsigned int>DisplayHeight(dpy, DefaultScreen(dpy))); // NOLINT
         mWindowPosX = mWindowPosY = 0;
         mIsHidden = false;
         mWindowTitle = tmp_title;
 
-        mWindow = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy), 0, 0, mDataWidth, mDataHeight, 0, 0L, 0L);
+        mWindow = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy), 0, 0, mDataWidth, mDataHeight, 0, 0L, 0L); // NOLINT
 
         XSelectInput(dpy, mWindow,
                      ExposureMask | StructureNotifyMask | ButtonPressMask | KeyPressMask | PointerMotionMask |
@@ -525,8 +525,8 @@ private:  // UNIX
 
         static const char* const mWindow_class = "Fluffkiosk";
         XClassHint* const window_class = XAllocClassHint();
-        window_class->res_name = (char*)mWindow_class;
-        window_class->res_class = (char*)mWindow_class;
+        window_class->res_name = const_cast<char*>(mWindow_class);  // NOLINT
+        window_class->res_class = const_cast<char*>(mWindow_class); // NOLINT
         XSetClassHint(dpy, mWindow, window_class);
         XFree(window_class);
 
