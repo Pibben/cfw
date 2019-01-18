@@ -140,6 +140,11 @@ public:  // common
         constructImpl(width, height, title);
     }
 
+    Window(const Window&) = delete;
+    Window(Window&&) = delete;
+    void operator=(const Window&) = delete;
+    void operator=(Window&&) = delete;
+
     template <class Func>
     void setKeyCallback(Func&& func) {
         mKeyboardCallback = std::forward<Func>(func);
@@ -203,12 +208,17 @@ private:  // UNIX
         bool mShmEnabled{false};
         bool mIsBigEndian{false};
 
-        X11Globals() : mThreadStopSemaphore(false) { XInitThreads(); }
+        X11Globals() noexcept : mThreadStopSemaphore(false) { XInitThreads(); }
 
         ~X11Globals() {
             mThreadStopSemaphore = true;
             mEventThread.join();
         }
+
+        X11Globals(const X11Globals&) = delete;
+        X11Globals(X11Globals&&) = delete;
+        void operator=(const X11Globals&) = delete;
+        void operator=(X11Globals&&) = delete;
     };
 
     static X11Globals x11;
@@ -218,7 +228,7 @@ private:  // UNIX
     ::Window mWindow{};
     XImage* mXImage{};
     uint32_t* mData{};
-    XShmSegmentInfo* mShmInfo{};
+    std::unique_ptr<XShmSegmentInfo> mShmInfo{};
 
     void handleEvents(const XEvent* const pevent) {
         Display* const dpy = x11.mDisplay;
@@ -250,7 +260,7 @@ private:  // UNIX
 
                 GC gc = DefaultGC(dpy, DefaultScreen(dpy));  // NOLINT
 
-                if (mShmInfo != nullptr) {
+                if (mShmInfo) {
                     XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
                 } else {
                     XPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight);
@@ -433,13 +443,12 @@ private:  // UNIX
         XDestroyWindow(dpy, mWindow);
         mWindow = 0;
 
-        if (mShmInfo != nullptr) {
-            XShmDetach(dpy, mShmInfo);
+        if (mShmInfo) {
+            XShmDetach(dpy, mShmInfo.get());
             XDestroyImage(mXImage);
             shmdt(mShmInfo->shmaddr);
             shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
-            delete mShmInfo;
-            mShmInfo = nullptr;
+            mShmInfo.reset();
         } else {
             XDestroyImage(mXImage);
         }
@@ -523,52 +532,49 @@ private:  // UNIX
         mWindowWidth = mDataWidth;
         mWindowHeight = mDataHeight;
 
-        mShmInfo = nullptr;
-        if (XShmQueryExtension(dpy) != 0) {
-            mShmInfo = new XShmSegmentInfo;
-            mXImage = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr,
-                                      mShmInfo, mDataWidth, mDataHeight);
+        mShmInfo.reset();
+        if (XShmQueryExtension(dpy) != 0) {  // NOLINT
+            mShmInfo = std::make_unique<XShmSegmentInfo>();
+            mXImage =
+                XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr,  // NOLINT
+                                mShmInfo.get(), mDataWidth, mDataHeight);
             if (mXImage == nullptr) {
-                delete mShmInfo;
-                mShmInfo = nullptr;
+                mShmInfo.reset();
             } else {
                 mShmInfo->shmid = shmget(IPC_PRIVATE, mXImage->bytes_per_line * mXImage->height, IPC_CREAT | 0777);
                 if (mShmInfo->shmid == -1) {
                     XDestroyImage(mXImage);
-                    delete mShmInfo;
-                    mShmInfo = nullptr;
+                    mShmInfo.reset();
                 } else {
                     mData = static_cast<uint32_t*>(shmat(mShmInfo->shmid, nullptr, 0));
                     mXImage->data = reinterpret_cast<char*>(mData);
                     mShmInfo->shmaddr = reinterpret_cast<char*>(mData);
-                    if (mShmInfo->shmaddr == (char*)-1) {
+                    if (mShmInfo->shmaddr == reinterpret_cast<char*>(-1)) {
                         shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                         XDestroyImage(mXImage);
-                        delete mShmInfo;
-                        mShmInfo = nullptr;
+                        mShmInfo.reset();
                     } else {
                         mShmInfo->readOnly = 0;
                         x11.mShmEnabled = true;
                         XErrorHandler oldXErrorHandler = XSetErrorHandler(shmErrorHandler);
-                        XShmAttach(dpy, mShmInfo);
+                        XShmAttach(dpy, mShmInfo.get());
                         XSync(dpy, 0);
                         XSetErrorHandler(oldXErrorHandler);
                         if (!x11.mShmEnabled) {
                             shmdt(mShmInfo->shmaddr);
                             shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                             XDestroyImage(mXImage);
-                            delete mShmInfo;
-                            mShmInfo = nullptr;
+                            mShmInfo.reset();
                         }
                     }
                 }
             }
         }
-        if (mShmInfo == nullptr) {
+        if (!mShmInfo) {
             assert(x11.mBitDepth == 24);
             const uint32_t buf_size = mDataWidth * mDataHeight * 4;
             mData = static_cast<uint32_t*>(std::malloc(buf_size));  // TODO: Don't use raw allocation
-            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0,
+            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0,  // NOLINT
                                    reinterpret_cast<char*>(mData), mDataWidth, mDataHeight, 8, 0);
         }
 
@@ -591,7 +597,7 @@ private:  // UNIX
 
     static bool isBigEndian() {
         const int x = 1;
-        return ((unsigned char*)&x)[0] != 0u ? false : true;
+        return reinterpret_cast<const unsigned char*>(&x)[0] == 0u;
     }
 
 public:  /// UNIX
