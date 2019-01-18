@@ -30,11 +30,11 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/XShm.h>
 #include <X11/keysym.h>
-#include <atomic>
-#include <set>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/time.h>
+#include <atomic>
+#include <set>
 
 #elif OS_TYPE == OS_WINDOWS
 #ifndef NOMINMAX
@@ -64,7 +64,7 @@ enum class Keys {
 
 inline void sleep(const unsigned int milliseconds) {
 #if OS_TYPE == OS_UNIX
-    struct timespec tv{};
+    struct timespec tv {};
     tv.tv_sec = milliseconds / 1000;
     tv.tv_nsec = (milliseconds % 1000) * 1000000;
     nanosleep(&tv, nullptr);
@@ -203,12 +203,7 @@ private:  // UNIX
         bool mShmEnabled{false};
         bool mIsBigEndian{false};
 
-        X11Globals()
-            : 
-              mThreadStopSemaphore(false)
-              {
-            XInitThreads();
-        }
+        X11Globals() : mThreadStopSemaphore(false) { XInitThreads(); }
 
         ~X11Globals() {
             mThreadStopSemaphore = true;
@@ -253,7 +248,7 @@ private:  // UNIX
                     return;
                 }
 
-                GC gc = DefaultGC(dpy, DefaultScreen(dpy)); // NOLINT
+                GC gc = DefaultGC(dpy, DefaultScreen(dpy));  // NOLINT
 
                 if (mShmInfo != nullptr) {
                     XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
@@ -458,7 +453,7 @@ private:  // UNIX
         mIsHidden = true;
         mWindowTitle = nullptr;
         dispatchCloseCallback();
-   }
+    }
 
     void constructImpl(const unsigned int dimw, const unsigned int dimh, const char* const title = nullptr) {
         if ((dimw == 0u) || (dimh == 0u)) {
@@ -482,7 +477,7 @@ private:  // UNIX
                 exit(1);
             }
 
-            x11.mBitDepth = DefaultDepth(dpy, DefaultScreen(dpy)); // NOLINT
+            x11.mBitDepth = DefaultDepth(dpy, DefaultScreen(dpy));  // NOLINT
             if (x11.mBitDepth != 8 && x11.mBitDepth != 16 && x11.mBitDepth != 24 && x11.mBitDepth != 32) {
                 std::cerr << "Invalid screen mode detected (only 8, 16, 24 and "
                              "32 bits "
@@ -492,25 +487,25 @@ private:  // UNIX
             }
 
             XVisualInfo vtemplate;
-            vtemplate.visualid = XVisualIDFromVisual(DefaultVisual(dpy, DefaultScreen(dpy))); // NOLINT
+            vtemplate.visualid = XVisualIDFromVisual(DefaultVisual(dpy, DefaultScreen(dpy)));  // NOLINT
             int nb_visuals;
-            XVisualInfo* vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals); // NOLINT
+            XVisualInfo* vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals);  // NOLINT
             if ((vinfo != nullptr) && vinfo->red_mask < vinfo->blue_mask) {
                 x11.mIsBGR = true;
             }
-            x11.mIsBigEndian = ImageByteOrder(dpy); // NOLINT
+            x11.mIsBigEndian = ImageByteOrder(dpy);  // NOLINT
             XFree(vinfo);
 
             x11.mEventThread = std::thread(eventThread);
         }
 
-        mDataWidth = std::min(dimw, static_cast<unsigned int>DisplayWidth(dpy, DefaultScreen(dpy))); // NOLINT
-        mDataHeight = std::min(dimh, static_cast<unsigned int>DisplayHeight(dpy, DefaultScreen(dpy))); // NOLINT
+        mDataWidth = std::min(dimw, static_cast<unsigned int> DisplayWidth(dpy, DefaultScreen(dpy)));    // NOLINT
+        mDataHeight = std::min(dimh, static_cast<unsigned int> DisplayHeight(dpy, DefaultScreen(dpy)));  // NOLINT
         mWindowPosX = mWindowPosY = 0;
         mIsHidden = false;
         mWindowTitle = tmp_title;
 
-        mWindow = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy), 0, 0, mDataWidth, mDataHeight, 0, 0L, 0L); // NOLINT
+        mWindow = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy), 0, 0, mDataWidth, mDataHeight, 0, 0L, 0L);  // NOLINT
 
         XSelectInput(dpy, mWindow,
                      ExposureMask | StructureNotifyMask | ButtonPressMask | KeyPressMask | PointerMotionMask |
@@ -520,8 +515,8 @@ private:  // UNIX
 
         static const char* const mWindow_class = "Fluffkiosk";
         XClassHint* const window_class = XAllocClassHint();
-        window_class->res_name = const_cast<char*>(mWindow_class);  // NOLINT
-        window_class->res_class = const_cast<char*>(mWindow_class); // NOLINT
+        window_class->res_name = const_cast<char*>(mWindow_class);   // NOLINT
+        window_class->res_class = const_cast<char*>(mWindow_class);  // NOLINT
         XSetClassHint(dpy, mWindow, window_class);
         XFree(window_class);
 
@@ -531,8 +526,8 @@ private:  // UNIX
         mShmInfo = nullptr;
         if (XShmQueryExtension(dpy) != 0) {
             mShmInfo = new XShmSegmentInfo;
-            mXImage = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr, mShmInfo,
-                                      mDataWidth, mDataHeight);
+            mXImage = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr,
+                                      mShmInfo, mDataWidth, mDataHeight);
             if (mXImage == nullptr) {
                 delete mShmInfo;
                 mShmInfo = nullptr;
@@ -573,8 +568,8 @@ private:  // UNIX
             assert(x11.mBitDepth == 24);
             const uint32_t buf_size = mDataWidth * mDataHeight * 4;
             mData = static_cast<uint32_t*>(std::malloc(buf_size));  // TODO: Don't use raw allocation
-            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0, reinterpret_cast<char*>(mData),
-                                   mDataWidth, mDataHeight, 8, 0);
+            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0,
+                                   reinterpret_cast<char*>(mData), mDataWidth, mDataHeight, 8, 0);
         }
 
         mWindowAtom = XInternAtom(dpy, "WM_DELETE_WINDOW", 0);
@@ -618,7 +613,7 @@ public:  /// UNIX
         mWindowPosX = mWindowPosY = -1;
         mIsHidden = true;
         dispatchCloseCallback();
-   }
+    }
 
     void move(const int posx, const int posy) {
         if (mWindowPosX != posx || mWindowPosY != posy) {
@@ -645,31 +640,28 @@ public:  /// UNIX
             return;
         }
         Display* const dpy = x11.mDisplay;
-        XClearArea(dpy, mWindow, 0, 0, 1, 1,
-                   1);     }
+        XClearArea(dpy, mWindow, 0, 0, 1, 1, 1);
+    }
 
     void render(const unsigned char* data, int width, int height) {
         assert(!x11.mIsBGR);
         auto* ndata = static_cast<unsigned int*>(mData);
 
-        static_assert(sizeof(int) == 4 );
+        static_assert(sizeof(int) == 4);
         assert(x11.mBitDepth == 24);
 
         if (x11.mIsBigEndian == isBigEndian()) {
             for (int xy = width * height; xy > 0; --xy) {
-                *(ndata++) =
-                    (*(data) << 16) | (*(data + 1) << 8) | *(data + 2);
+                *(ndata++) = (*(data) << 16) | (*(data + 1) << 8) | *(data + 2);
                 data += 3;
             }
         } else {
             for (int xy = width * height; xy > 0; --xy) {
-                *(ndata++) = (*(data) << 24) | (*(data + 1) << 16) |
-                             (*(data + 2) << 8);
+                *(ndata++) = (*(data) << 24) | (*(data + 1) << 16) | (*(data + 2) << 8);
                 data += 3;
             }
         }
-
-           }
+    }
 
 private:  // WINDOWS
 #elif OS_TYPE == OS_WINDOWS
