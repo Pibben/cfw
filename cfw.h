@@ -208,6 +208,11 @@ private:  // UNIX
         bool mShmEnabled{false};
         bool mIsBigEndian{false};
 
+        static X11Globals& ref() {
+            static X11Globals x11;
+            return x11;
+        }
+
         X11Globals() noexcept : mThreadStopSemaphore(false) { XInitThreads(); }
 
         ~X11Globals() {
@@ -221,8 +226,6 @@ private:  // UNIX
         void operator=(X11Globals&&) = delete;
     };
 
-    static X11Globals x11;
-
     Atom mWindowAtom{};
     Atom mProtocolAtom{};
     ::Window mWindow{};
@@ -231,7 +234,7 @@ private:  // UNIX
     std::unique_ptr<XShmSegmentInfo> mShmInfo{};
 
     void handleEvents(const XEvent* const pevent) {
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
         XEvent event = *pevent;
         switch (event.type) {
             case ClientMessage: {
@@ -367,7 +370,7 @@ private:  // UNIX
     }
 
     static void* eventThread() {
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
         XEvent event;
 
         for (;;) {
@@ -380,13 +383,13 @@ private:  // UNIX
                                              &event);
             }
             if (event_flag != 0) {
-                for (auto win : x11.mWins) {
+                for (auto win : X11Globals::ref().mWins) {
                     if (!win->mIsHidden && event.xany.window == win->mWindow) {
                         win->handleEvents(&event);
                     }
                 }
             }
-            if (x11.mThreadStopSemaphore) {
+            if (X11Globals::ref().mThreadStopSemaphore) {
                 break;
             }
             sleep(8);
@@ -395,7 +398,7 @@ private:  // UNIX
     }
 
     void mapWindow() {
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
         bool is_exposed = false, is_mapped = false;
         XWindowAttributes attr;
         XEvent event;
@@ -425,16 +428,17 @@ private:  // UNIX
     static int shmErrorHandler(Display* dpy, XErrorEvent* error) {
         (void)dpy;
         (void)error;
-        x11.mShmEnabled = false;
+        X11Globals::ref().mShmEnabled = false;
         return 0;
     }
 
     void destructImpl() {
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
 
-        auto iter = std::find_if(x11.mWins.begin(), x11.mWins.end(), [this](Window* w) { return w == this; });
-        assert(iter != x11.mWins.end());
-        x11.mWins.erase(iter);
+        auto iter = std::find_if(X11Globals::ref().mWins.begin(), X11Globals::ref().mWins.end(),
+                                 [this](Window* w) { return w == this; });
+        assert(iter != X11Globals::ref().mWins.end());
+        X11Globals::ref().mWins.erase(iter);
 
         XDestroyWindow(dpy, mWindow);
         mWindow = 0;
@@ -469,9 +473,9 @@ private:  // UNIX
             std::memcpy(tmp_title, nptitle, s * sizeof(char));
         }
 
-        x11.mSetupMutex.lock();
+        X11Globals::ref().mSetupMutex.lock();
 
-        Display*& dpy = x11.mDisplay;
+        Display*& dpy = X11Globals::ref().mDisplay;
         if (dpy == nullptr) {
             dpy = XOpenDisplay(nullptr);
             if (dpy == nullptr) {
@@ -479,8 +483,9 @@ private:  // UNIX
                 exit(1);
             }
 
-            x11.mBitDepth = DefaultDepth(dpy, DefaultScreen(dpy));  // NOLINT
-            if (x11.mBitDepth != 8 && x11.mBitDepth != 16 && x11.mBitDepth != 24 && x11.mBitDepth != 32) {
+            X11Globals::ref().mBitDepth = DefaultDepth(dpy, DefaultScreen(dpy));  // NOLINT
+            if (X11Globals::ref().mBitDepth != 8 && X11Globals::ref().mBitDepth != 16 &&
+                X11Globals::ref().mBitDepth != 24 && X11Globals::ref().mBitDepth != 32) {
                 std::cerr << "Invalid screen mode detected (only 8, 16, 24 and "
                              "32 bits "
                              "modes are managed)."
@@ -493,12 +498,12 @@ private:  // UNIX
             int nb_visuals;
             XVisualInfo* vinfo = XGetVisualInfo(dpy, VisualIDMask, &vtemplate, &nb_visuals);  // NOLINT
             if ((vinfo != nullptr) && vinfo->red_mask < vinfo->blue_mask) {
-                x11.mIsBGR = true;
+                X11Globals::ref().mIsBGR = true;
             }
-            x11.mIsBigEndian = ImageByteOrder(dpy);  // NOLINT
+            X11Globals::ref().mIsBigEndian = ImageByteOrder(dpy);  // NOLINT
             XFree(vinfo);
 
-            x11.mEventThread = std::thread(eventThread);
+            X11Globals::ref().mEventThread = std::thread(eventThread);
         }
 
         mDataWidth = std::min(dimw, static_cast<unsigned int> DisplayWidth(dpy, DefaultScreen(dpy)));    // NOLINT
@@ -527,9 +532,8 @@ private:  // UNIX
 
         assert(XShmQueryExtension(dpy) != 0);  // NOLINT
         mShmInfo = std::make_unique<XShmSegmentInfo>();
-        mXImage =
-            XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr,  // NOLINT
-                            mShmInfo.get(), mDataWidth, mDataHeight);
+        mXImage = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), X11Globals::ref().mBitDepth,  // NOLINT
+                                  ZPixmap, nullptr, mShmInfo.get(), mDataWidth, mDataHeight);
         if (mXImage == nullptr) {
             mShmInfo.reset();
         } else {
@@ -547,12 +551,12 @@ private:  // UNIX
                     mShmInfo.reset();
                 } else {
                     mShmInfo->readOnly = 0;
-                    x11.mShmEnabled = true;
+                    X11Globals::ref().mShmEnabled = true;
                     XErrorHandler oldXErrorHandler = XSetErrorHandler(shmErrorHandler);
                     XShmAttach(dpy, mShmInfo.get());
                     XSync(dpy, 0);
                     XSetErrorHandler(oldXErrorHandler);
-                    if (!x11.mShmEnabled) {
+                    if (!X11Globals::ref().mShmEnabled) {
                         shmdt(mShmInfo->shmaddr);
                         shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                         XDestroyImage(mXImage);
@@ -567,15 +571,15 @@ private:  // UNIX
         mProtocolAtom = XInternAtom(dpy, "WM_PROTOCOLS", 0);
         XSetWMProtocols(dpy, mWindow, &mWindowAtom, 1);
 
-        x11.mWins.insert(this);
+        X11Globals::ref().mWins.insert(this);
         if (!mIsHidden) {
             mapWindow();
         } else {
             mWindowPosX = mWindowPosY = std::numeric_limits<int>::min();
         }
-        x11.mSetupMutex.unlock();
+        X11Globals::ref().mSetupMutex.unlock();
 
-        assert(x11.mBitDepth == 24);
+        assert(X11Globals::ref().mBitDepth == 24);
         std::memset(mData, 0, mDataWidth * mDataHeight * 4);
         paint();
     }
@@ -599,7 +603,7 @@ public:  /// UNIX
         if (mIsHidden) {
             return;
         }
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
         XUnmapWindow(dpy, mWindow);
         mWindowPosX = mWindowPosY = -1;
         mIsHidden = true;
@@ -609,7 +613,7 @@ public:  /// UNIX
     void move(const int posx, const int posy) {
         if (mWindowPosX != posx || mWindowPosY != posy) {
             show();
-            Display* const dpy = x11.mDisplay;
+            Display* const dpy = X11Globals::ref().mDisplay;
             XMoveWindow(dpy, mWindow, posx, posy);
             mWindowPosX = posx;
             mWindowPosY = posy;
@@ -618,11 +622,11 @@ public:  /// UNIX
     }
 
     void setTitle(const std::string& title) {
-        delete[] mWindowTitle;
+        delete[] mWindowTitle;  // NOLINT
         const unsigned int size = title.size() + 1;
-        mWindowTitle = new char[size];
+        mWindowTitle = new char[size];  // NOLINT
         std::memcpy(mWindowTitle, title.c_str(), size);
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
         XStoreName(dpy, mWindow, mWindowTitle);
     }
 
@@ -630,18 +634,18 @@ public:  /// UNIX
         if (mIsHidden || (mXImage == nullptr)) {
             return;
         }
-        Display* const dpy = x11.mDisplay;
+        Display* const dpy = X11Globals::ref().mDisplay;
         XClearArea(dpy, mWindow, 0, 0, 1, 1, 1);
     }
 
     void render(const unsigned char* data, int width, int height) {
-        assert(!x11.mIsBGR);
+        assert(!X11Globals::ref().mIsBGR);
         auto* ndata = static_cast<unsigned int*>(mData);
 
         static_assert(sizeof(int) == 4);
-        assert(x11.mBitDepth == 24);
+        assert(X11Globals::ref().mBitDepth == 24);
 
-        if (x11.mIsBigEndian == isBigEndian()) {
+        if (X11Globals::ref().mIsBigEndian == isBigEndian()) {
             for (int xy = width * height; xy > 0; --xy) {
                 *(ndata++) = (*(data) << 16) | (*(data + 1) << 8) | *(data + 2);
                 data += 3;
@@ -954,9 +958,7 @@ public:  // WINDOWS
 
 #endif
 };
-#if OS_TYPE == OS_UNIX
-Window::X11Globals Window::x11;
-#endif
+
 }  // namespace cfw
 
 #endif
