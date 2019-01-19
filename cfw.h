@@ -260,11 +260,7 @@ private:  // UNIX
 
                 GC gc = DefaultGC(dpy, DefaultScreen(dpy));  // NOLINT
 
-                if (mShmInfo) {
-                    XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
-                } else {
-                    XPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight);
-                }
+                XShmPutImage(dpy, mWindow, gc, mXImage, 0, 0, 0, 0, mDataWidth, mDataHeight, 1);
             } break;
             case ButtonPress: {
                 bool haveMoreEvents = true;
@@ -443,15 +439,12 @@ private:  // UNIX
         XDestroyWindow(dpy, mWindow);
         mWindow = 0;
 
-        if (mShmInfo) {
-            XShmDetach(dpy, mShmInfo.get());
-            XDestroyImage(mXImage);
-            shmdt(mShmInfo->shmaddr);
-            shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
-            mShmInfo.reset();
-        } else {
-            XDestroyImage(mXImage);
-        }
+        XShmDetach(dpy, mShmInfo.get());
+        XDestroyImage(mXImage);
+        shmdt(mShmInfo->shmaddr);
+        shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
+        mShmInfo.reset();
+
         mData = nullptr;
         mXImage = nullptr;
         XSync(dpy, 0);
@@ -532,51 +525,43 @@ private:  // UNIX
         mWindowWidth = mDataWidth;
         mWindowHeight = mDataHeight;
 
-        mShmInfo.reset();
-        if (XShmQueryExtension(dpy) != 0) {  // NOLINT
-            mShmInfo = std::make_unique<XShmSegmentInfo>();
-            mXImage =
-                XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr,  // NOLINT
-                                mShmInfo.get(), mDataWidth, mDataHeight);
-            if (mXImage == nullptr) {
+        assert(XShmQueryExtension(dpy) != 0);  // NOLINT
+        mShmInfo = std::make_unique<XShmSegmentInfo>();
+        mXImage =
+            XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, nullptr,  // NOLINT
+                            mShmInfo.get(), mDataWidth, mDataHeight);
+        if (mXImage == nullptr) {
+            mShmInfo.reset();
+        } else {
+            mShmInfo->shmid = shmget(IPC_PRIVATE, mXImage->bytes_per_line * mXImage->height, IPC_CREAT | 0777);
+            if (mShmInfo->shmid == -1) {
+                XDestroyImage(mXImage);
                 mShmInfo.reset();
             } else {
-                mShmInfo->shmid = shmget(IPC_PRIVATE, mXImage->bytes_per_line * mXImage->height, IPC_CREAT | 0777);
-                if (mShmInfo->shmid == -1) {
+                mData = static_cast<uint32_t*>(shmat(mShmInfo->shmid, nullptr, 0));
+                mXImage->data = reinterpret_cast<char*>(mData);
+                mShmInfo->shmaddr = reinterpret_cast<char*>(mData);
+                if (mShmInfo->shmaddr == reinterpret_cast<char*>(-1)) {
+                    shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                     XDestroyImage(mXImage);
                     mShmInfo.reset();
                 } else {
-                    mData = static_cast<uint32_t*>(shmat(mShmInfo->shmid, nullptr, 0));
-                    mXImage->data = reinterpret_cast<char*>(mData);
-                    mShmInfo->shmaddr = reinterpret_cast<char*>(mData);
-                    if (mShmInfo->shmaddr == reinterpret_cast<char*>(-1)) {
+                    mShmInfo->readOnly = 0;
+                    x11.mShmEnabled = true;
+                    XErrorHandler oldXErrorHandler = XSetErrorHandler(shmErrorHandler);
+                    XShmAttach(dpy, mShmInfo.get());
+                    XSync(dpy, 0);
+                    XSetErrorHandler(oldXErrorHandler);
+                    if (!x11.mShmEnabled) {
+                        shmdt(mShmInfo->shmaddr);
                         shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
                         XDestroyImage(mXImage);
                         mShmInfo.reset();
-                    } else {
-                        mShmInfo->readOnly = 0;
-                        x11.mShmEnabled = true;
-                        XErrorHandler oldXErrorHandler = XSetErrorHandler(shmErrorHandler);
-                        XShmAttach(dpy, mShmInfo.get());
-                        XSync(dpy, 0);
-                        XSetErrorHandler(oldXErrorHandler);
-                        if (!x11.mShmEnabled) {
-                            shmdt(mShmInfo->shmaddr);
-                            shmctl(mShmInfo->shmid, IPC_RMID, nullptr);
-                            XDestroyImage(mXImage);
-                            mShmInfo.reset();
-                        }
                     }
                 }
             }
         }
-        if (!mShmInfo) {
-            assert(x11.mBitDepth == 24);
-            const uint32_t buf_size = mDataWidth * mDataHeight * 4;
-            mData = static_cast<uint32_t*>(std::malloc(buf_size));  // TODO: Don't use raw allocation
-            mXImage = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), x11.mBitDepth, ZPixmap, 0,  // NOLINT
-                                   reinterpret_cast<char*>(mData), mDataWidth, mDataHeight, 8, 0);
-        }
+        assert(mShmInfo);
 
         mWindowAtom = XInternAtom(dpy, "WM_DELETE_WINDOW", 0);
         mProtocolAtom = XInternAtom(dpy, "WM_PROTOCOLS", 0);
