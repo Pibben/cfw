@@ -672,11 +672,8 @@ private:  // WINDOWS
     HDC mDeviceContextHandle{};
 
     static LRESULT APIENTRY handleEvents(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) {
-#ifdef _WIN64  // TODO: Remove
-        Window* const disp = (Window*)GetWindowLongPtr(window, GWLP_USERDATA);
-#else
         auto* const disp = reinterpret_cast<Window*>(GetWindowLongPtr(window, GWLP_USERDATA));
-#endif
+
         // TODO: Create function in Display class to handle event. Improve
         // encapsulation.
         switch (msg) {
@@ -814,13 +811,10 @@ private:  // WINDOWS
         disp->mDeviceContextHandle = GetDC(disp->mWindowHandle);
         disp->mWindowWidth = disp->mDataWidth;
         disp->mWindowHeight = disp->mDataHeight;
-#ifdef _WIN64  // TODO: Remove
-        SetWindowLongPtr(disp->mWindow, GWLP_USERDATA, (LONG_PTR)disp);
-        SetWindowLongPtr(disp->mWindow, GWLP_WNDPROC, (LONG_PTR)handleEvents);
-#else
+
         SetWindowLongPtr(disp->mWindowHandle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(disp));
         SetWindowLongPtr(disp->mWindowHandle, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(handleEvents));
-#endif
+
         SetEvent(disp->isCreatedSemaphoreHandle);
         while (GetMessage(&msg, nullptr, 0, 0)) { DispatchMessage(&msg);
 }
@@ -933,7 +927,7 @@ public:  // WINDOWS
 
     void setTitle(const std::string& title) {
         delete[] mWindowTitle;
-        const unsigned int size = title.size() + 1;
+        const size_t size = title.size() + 1;
         mWindowTitle = new char[size];  // NOLINT
         std::memcpy(mWindowTitle, title.c_str(), size);
         SetWindowTextA(mWindowHandle, mWindowTitle);
