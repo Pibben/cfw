@@ -176,9 +176,9 @@ private:  // common
     void setMouseButtonState(const unsigned int button, const bool isPressed = true) {
         const uint_fast8_t buttoncode = button == 1U ? 1U : button == 2U ? 2U : button == 3U ? 4U : 0U;
         if (isPressed) {
-            mMouseButtonState |= buttoncode;
+            mMouseButtonState |= buttoncode;  // NOLINT
         } else {
-            mMouseButtonState &= ~buttoncode;
+            mMouseButtonState &= ~buttoncode;  // NOLINT
         }
     }
 
@@ -661,21 +661,21 @@ public:  /// UNIX
 private:  // WINDOWS
 #elif OS_TYPE == OS_WINDOWS
 
-    bool mMouseIsTracked;
-    HANDLE mmEventThreadHandle;
-    HANDLE isCreatedSemaphoreHandle;
-    HANDLE mWindowMutexHandle;
-    HWND mWindowHandle;
-    CLIENTCREATESTRUCT mClientCreateStruct;
-    uint32_t* mPixels;  // TODO: Don't use raw allocation
-    BITMAPINFO mBitmapInfo;
-    HDC mDeviceContextHandle;
+    bool mMouseIsTracked{};
+    HANDLE mmEventThreadHandle{};
+    HANDLE isCreatedSemaphoreHandle{};
+    HANDLE mWindowMutexHandle{};
+    HWND mWindowHandle{};
+    CLIENTCREATESTRUCT mClientCreateStruct{};
+    uint32_t* mPixels{};  // TODO: Don't use raw allocation
+    BITMAPINFO mBitmapInfo{};
+    HDC mDeviceContextHandle{};
 
     static LRESULT APIENTRY handleEvents(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) {
-#ifdef _WIN64
+#ifdef _WIN64  // TODO: Remove
         Window* const disp = (Window*)GetWindowLongPtr(window, GWLP_USERDATA);
 #else
-        Window* const disp = (Window*)GetWindowLong(window, GWL_USERDATA);
+        auto* const disp = reinterpret_cast<Window*>(GetWindowLongPtr(window, GWLP_USERDATA));
 #endif
         // TODO: Create function in Display class to handle event. Improve
         // encapsulation.
@@ -695,7 +695,8 @@ private:  // WINDOWS
                 while (PeekMessage(&st_msg, window, WM_SIZE, WM_SIZE, PM_REMOVE)) {
                 }
                 WaitForSingleObject(disp->mWindowMutexHandle, INFINITE);
-                const int nx = (int)(short)(LOWORD(lParam)), ny = (int)(short)(HIWORD(lParam));
+                const int nx = MAKEPOINTS(lParam).x;  // NOLINT
+                const int ny = MAKEPOINTS(lParam).y;  // NOLINT
                 if (nx != disp->mWindowPosX || ny != disp->mWindowPosY) {
                     disp->mWindowPosX = nx;
                     disp->mWindowPosY = ny;
@@ -706,30 +707,30 @@ private:  // WINDOWS
                 disp->paint();
                 break;
             case WM_KEYDOWN:
-                disp->setKey((unsigned int)wParam);
+                disp->setKey(static_cast<unsigned int>(wParam));
                 break;
             case WM_KEYUP:
-                disp->setKey((unsigned int)wParam, false);
+                disp->setKey(static_cast<unsigned int>(wParam), false);
                 break;
             case WM_MOUSEMOVE: {
                 MSG st_msg;
                 while (PeekMessage(&st_msg, window, WM_MOUSEMOVE, WM_MOUSEMOVE, PM_REMOVE)) {
                 }
-                disp->mMousePosX = LOWORD(lParam);
-                disp->mMousePosY = HIWORD(lParam);
+                disp->mMousePosX = MAKEPOINTS(lParam).x;  // NOLINT
+                disp->mMousePosY = MAKEPOINTS(lParam).y;  // NOLINT
 #if (_WIN32_WINNT >= 0x0400) && !defined(NOTRACKMOUSEEVENT)
                 if (!disp->mMouseIsTracked) {
                     TRACKMOUSEEVENT tme;
                     tme.cbSize = sizeof(TRACKMOUSEEVENT);
                     tme.dwFlags = TME_LEAVE;
                     tme.hwndTrack = disp->mWindowHandle;
-                    if (TrackMouseEvent(&tme)) {
+                    if (TrackMouseEvent(&tme) != 0) {
                         disp->mMouseIsTracked = true;
                     }
                 }
 #endif
-                if (disp->mMousePosX < 0 || disp->mMousePosY < 0 || disp->mMousePosX >= (int)disp->mDataWidth ||
-                    disp->mMousePosY >= (int)disp->mDataHeight) {
+                if (disp->mMousePosX < 0 || disp->mMousePosY < 0 || disp->mMousePosX >= static_cast<int>(disp->mDataWidth) ||
+                    disp->mMousePosY >= static_cast<int>(disp->mDataHeight)) {
                     disp->mMousePosX = disp->mMousePosY = -1;
                 }
                 disp->dispatchMouseCallback();
@@ -763,20 +764,23 @@ private:  // WINDOWS
                 disp->dispatchMouseCallback();
                 break;
             case WM_MOUSEWHEEL:
-                disp->setMouseWheelState((int_fast32_t)((uint16_t)HIWORD(wParam)) / 120);
+              //TODO:
+                disp->setMouseWheelState(static_cast<int_fast32_t>(static_cast<uint16_t>HIWORD(wParam)) / 120);  // NOLINT
                 disp->dispatchMouseCallback();
+            default:
+                break;
         }
         return DefWindowProc(window, msg, wParam, lParam);
     }
 
     static DWORD WINAPI mEventThread(void* arg) {
-        Window* const disp = (Window*)(((void**)arg)[0]);
-        const char* const title = (const char*)(((void**)arg)[1]);
+        auto* const disp = static_cast<Window*>((static_cast<void**>(arg))[0]);
+        const char* const title = static_cast<const char*>((static_cast<void**>(arg))[1]);
         MSG msg;
-        delete[](void**) arg;
+        delete[] static_cast<void**>(arg);  // NOLINT
         disp->mBitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         disp->mBitmapInfo.bmiHeader.biWidth = disp->mDataWidth;
-        disp->mBitmapInfo.bmiHeader.biHeight = -(int)disp->mDataHeight;
+        disp->mBitmapInfo.bmiHeader.biHeight = -static_cast<int>(disp->mDataHeight);
         disp->mBitmapInfo.bmiHeader.biPlanes = 1;
         disp->mBitmapInfo.bmiHeader.biBitCount = 32;
         disp->mBitmapInfo.bmiHeader.biCompression = BI_RGB;
@@ -785,19 +789,19 @@ private:  // WINDOWS
         disp->mBitmapInfo.bmiHeader.biYPelsPerMeter = 1;
         disp->mBitmapInfo.bmiHeader.biClrUsed = 0;
         disp->mBitmapInfo.bmiHeader.biClrImportant = 0;
-        disp->mPixels = new uint32_t[(size_t)disp->mDataWidth * disp->mDataHeight];
+        disp->mPixels = new uint32_t[static_cast<size_t>(disp->mDataWidth) * disp->mDataHeight];  // NOLINT
 
         RECT rect;
         rect.left = rect.top = 0;
-        rect.right = (LONG)disp->mDataWidth - 1;
-        rect.bottom = (LONG)disp->mDataHeight - 1;
-        AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, false);
-        const int border1 = (int)((rect.right - rect.left + 1 - disp->mDataWidth) / 2);
-        const int border2 = (int)(rect.bottom - rect.top + 1 - disp->mDataHeight - border1);
+        rect.right = static_cast<LONG>(disp->mDataWidth) - 1;
+        rect.bottom = static_cast<LONG>(disp->mDataHeight) - 1;
+        AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, 0);  // NOLINT
+        const int border1 = static_cast<int>((rect.right - rect.left + 1 - disp->mDataWidth) / 2);
+        const int border2 = static_cast<int>(rect.bottom - rect.top + 1 - disp->mDataHeight - border1);
         disp->mWindowHandle =
-            CreateWindowA("MDICLIENT", title ? title : " ", WS_OVERLAPPEDWINDOW | (disp->mIsHidden ? 0 : WS_VISIBLE),
+            CreateWindowA("MDICLIENT", title ? title : " ", WS_OVERLAPPEDWINDOW | (disp->mIsHidden ? 0 : WS_VISIBLE),  // NOLINT
                           CW_USEDEFAULT, CW_USEDEFAULT, disp->mDataWidth + 2 * border1,
-                          disp->mDataHeight + border1 + border2, 0, 0, 0, &disp->mClientCreateStruct);
+                          disp->mDataHeight + border1 + border2, nullptr, nullptr, nullptr, &disp->mClientCreateStruct);
         if (!disp->mIsHidden) {
             GetWindowRect(disp->mWindowHandle, &rect);
             disp->mWindowPosX = rect.left + border1;
@@ -810,15 +814,16 @@ private:  // WINDOWS
         disp->mDeviceContextHandle = GetDC(disp->mWindowHandle);
         disp->mWindowWidth = disp->mDataWidth;
         disp->mWindowHeight = disp->mDataHeight;
-#ifdef _WIN64
+#ifdef _WIN64  // TODO: Remove
         SetWindowLongPtr(disp->mWindow, GWLP_USERDATA, (LONG_PTR)disp);
         SetWindowLongPtr(disp->mWindow, GWLP_WNDPROC, (LONG_PTR)handleEvents);
 #else
-        SetWindowLong(disp->mWindowHandle, GWL_USERDATA, (LONG)disp);
-        SetWindowLong(disp->mWindowHandle, GWL_WNDPROC, (LONG)handleEvents);
+        SetWindowLongPtr(disp->mWindowHandle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(disp));
+        SetWindowLongPtr(disp->mWindowHandle, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(handleEvents));
 #endif
         SetEvent(disp->isCreatedSemaphoreHandle);
-        while (GetMessage(&msg, 0, 0, 0)) DispatchMessage(&msg);
+        while (GetMessage(&msg, nullptr, 0, 0)) { DispatchMessage(&msg);
+}
         return 0;
     }
 
@@ -828,11 +833,11 @@ private:  // WINDOWS
         } else {
             RECT rect;
             rect.left = rect.top = 0;
-            rect.right = (LONG)mDataWidth - 1;
-            rect.bottom = (LONG)mDataHeight - 1;
-            AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, false);
-            const int border1 = (int)((rect.right - rect.left + 1 - mDataWidth) / 2);
-            const int border2 = (int)(rect.bottom - rect.top + 1 - mDataHeight - border1);
+            rect.right = static_cast<LONG>(mDataWidth) - 1;
+            rect.bottom = static_cast<LONG>(mDataHeight) - 1;
+            AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, 0);  // NOLINT
+            const int border1 = static_cast<int>((rect.right - rect.left + 1 - mDataWidth) / 2);
+            const int border2 = static_cast<int>(rect.bottom - rect.top + 1 - mDataHeight - border1);
             GetWindowRect(mWindowHandle, &rect);
             mWindowPosX = rect.left + border1;
             mWindowPosY = rect.top + border2;
@@ -844,45 +849,45 @@ private:  // WINDOWS
         TerminateThread(mmEventThreadHandle, 0);
         delete[] mPixels;
         delete[] mWindowTitle;
-        mPixels = 0;
-        mWindowTitle = 0;
+        mPixels = nullptr;
+        mWindowTitle = nullptr;
         mDataWidth = mDataHeight = mWindowWidth = mWindowHeight = 0;
         mWindowPosX = mWindowPosY = 0;
         mIsHidden = true;
         dispatchCloseCallback();
     }
 
-    void constructImpl(const unsigned int dimw, const unsigned int dimh, const char* const title = 0) {
-        if (!dimw || !dimh) {
+    void constructImpl(const unsigned int dimw, const unsigned int dimh, const char* const title = nullptr) {
+        if ((dimw == 0u) || (dimh == 0u)) {
             destructImpl();
         }
 
-        const char* const nptitle = title ? title : "";
-        const unsigned int size = (unsigned int)std::strlen(nptitle) + 1;
-        char* const tmp = size ? new char[size] : 0;
-        if (size) {
+        const char* const nptitle = title != nullptr ? title : "";
+        const unsigned int size = static_cast<unsigned int>(std::strlen(nptitle)) + 1;
+        char* const tmp = size != 0u ? new char[size] : nullptr;
+        if (size != 0u) {
             std::memcpy(tmp, nptitle, size);
         }
 
         DEVMODE mode;
         mode.dmSize = sizeof(DEVMODE);
         mode.dmDriverExtra = 0;
-        EnumDisplaySettings(0, ENUM_CURRENT_SETTINGS, &mode);
+        EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &mode);
 
-        mDataWidth = std::min(dimw, (unsigned int)mode.dmPelsWidth);
-        mDataHeight = std::min(dimh, (unsigned int)mode.dmPelsHeight);
+        mDataWidth = std::min(dimw, static_cast<unsigned int>(mode.dmPelsWidth));
+        mDataHeight = std::min(dimh, static_cast<unsigned int>(mode.dmPelsHeight));
         mWindowPosX = mWindowPosY = 0;
         mIsHidden = false;
         mMouseIsTracked = false;
         mWindowTitle = tmp;
 
-        void* const arg = (void*)(new void*[2]);
-        ((void**)arg)[0] = (void*)this;
-        ((void**)arg)[1] = (void*)mWindowTitle;
-        mWindowMutexHandle = CreateMutex(0, FALSE, 0);
-        isCreatedSemaphoreHandle = CreateEvent(0, FALSE, FALSE, 0);
-        mmEventThreadHandle = CreateThread(0, 0, mEventThread, arg, 0,
-                                           0);  // TODO: Use std::thread instead.
+        void* const arg = reinterpret_cast<void*>(new void*[2]);
+        (static_cast<void**>(arg))[0] = reinterpret_cast<void*>(this);
+        (static_cast<void**>(arg))[1] = reinterpret_cast<void*>(mWindowTitle);
+        mWindowMutexHandle = CreateMutex(nullptr, FALSE, nullptr);
+        isCreatedSemaphoreHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        mmEventThreadHandle = CreateThread(nullptr, 0, mEventThread, arg, 0,
+                                           nullptr);  // TODO: Use std::thread instead.
         WaitForSingleObject(isCreatedSemaphoreHandle, INFINITE);
 
         std::memset(mPixels, 0, sizeof(unsigned int) * mDataWidth * mDataHeight);
@@ -891,7 +896,9 @@ private:  // WINDOWS
 
 public:  // WINDOWS
     void show() {
-        if (!mIsHidden) return;
+        if (!mIsHidden) {
+            return;
+        }
         mIsHidden = false;
         ShowWindow(mWindowHandle, SW_SHOW);
         updateWindowPosition();
@@ -899,7 +906,9 @@ public:  // WINDOWS
     }
 
     void hide() {
-        if (mIsHidden) return;
+        if (mIsHidden) {
+            return;
+        }
         mIsHidden = true;
         ShowWindow(mWindowHandle, SW_HIDE);
         mWindowPosX = mWindowPosY = 0;
@@ -910,12 +919,12 @@ public:  // WINDOWS
         if (mWindowPosX != posx || mWindowPosY != posy) {
             RECT rect;
             rect.left = rect.top = 0;
-            rect.right = (LONG)mWindowWidth - 1;
-            rect.bottom = (LONG)mWindowHeight - 1;
-            AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, false);
-            const int border1 = (int)((rect.right - rect.left + 1 - mDataWidth) / 2);
-            const int border2 = (int)(rect.bottom - rect.top + 1 - mDataHeight - border1);
-            SetWindowPos(mWindowHandle, 0, posx - border1, posy - border2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            rect.right = static_cast<LONG>(mWindowWidth) - 1;
+            rect.bottom = static_cast<LONG>(mWindowHeight) - 1;
+            AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, 0);  // NOLINT
+            const int border1 = static_cast<int>((rect.right - rect.left + 1 - mDataWidth) / 2);
+            const int border2 = static_cast<int>(rect.bottom - rect.top + 1 - mDataHeight - border1);
+            SetWindowPos(mWindowHandle, nullptr, posx - border1, posy - border2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);  // NOLINT
             mWindowPosX = posx;
             mWindowPosY = posy;
             show();
@@ -925,7 +934,7 @@ public:  // WINDOWS
     void setTitle(const std::string& title) {
         delete[] mWindowTitle;
         const unsigned int size = title.size() + 1;
-        mWindowTitle = new char[size];
+        mWindowTitle = new char[size];  // NOLINT
         std::memcpy(mWindowTitle, title.c_str(), size);
         SetWindowTextA(mWindowHandle, mWindowTitle);
     }
@@ -949,7 +958,7 @@ public:  // WINDOWS
             const uint8_t R = *(data);
             const uint8_t G = *(data + 1);
             const uint8_t B = *(data + 2);
-            *(ndata++) = (uint32_t)((R << 16) | (G << 8) | B);
+            *(ndata++) = static_cast<uint32_t>(R << 16U) | static_cast<uint32_t>(G << 8U) | B;
             data += 3;
         }
 
