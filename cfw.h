@@ -90,6 +90,7 @@ private:                 // common
     bool mIsHidden;
 
     std::function<void(Keys, bool)> mKeyboardCallback;
+    std::function<void(const char*)> mCharCallback;
     std::function<void(uint32_t, uint32_t, uint32_t, int32_t)> mMouseCallback;
     std::function<void(void)> mCloseCallback;
 
@@ -151,6 +152,11 @@ public:  // common
     }
 
     template <class Func>
+    void setCharCallback(Func&& func) {
+        mCharCallback = std::forward<Func>(func);
+    }
+
+    template <class Func>
     void setMouseCallback(Func&& func) {
         mMouseCallback = std::forward<Func>(func);
     }
@@ -192,6 +198,10 @@ private:  // common
                 }
             }
         }
+    }
+
+    void setChar(const char* chars) {
+        mCharCallback(chars);
     }
 
 private:  // UNIX
@@ -321,15 +331,29 @@ private:  // UNIX
                 dispatchMouseCallback();
             } break;
             case KeyPress: {
-                char tmp = 0;
+                unsigned char chars[32] = {};
                 KeySym ksym;
-                XLookupString(&event.xkey, &tmp, 1, &ksym, nullptr);
+                XLookupString(&event.xkey, (char*)chars, 32, &ksym, nullptr);
+
                 setKey(static_cast<unsigned int>(ksym), true);
+
+                // Convert to utf8
+                char utf8[3] = {};
+                if (chars[0] < 128) {
+                    utf8[0] = chars[0];
+                } else {
+                    utf8[0] = 0xc2+(chars[0] > 0xbf);
+                    utf8[1] = (chars[0] & 0x3f) + 0x80;
+                }
+
+                setChar(utf8);
             } break;
             case KeyRelease: {
                 char keys_return[32];
                 XQueryKeymap(dpy, keys_return);
-                const unsigned int kc = event.xkey.keycode, kc1 = kc / 8, kc2 = kc % 8;
+                const unsigned int kc = event.xkey.keycode;
+                const unsigned int kc1 = kc / 8;
+                const unsigned int kc2 = kc % 8;
                 const bool is_key_pressed = kc1 >= 32 ? false : ((keys_return[kc1] >> kc2) & 1) != 0;
                 if (!is_key_pressed) {
                     char tmp = 0;
