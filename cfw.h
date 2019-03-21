@@ -147,7 +147,9 @@ namespace cfw {
 #elif OS_TYPE == OS_WINDOWS
 
 #include "win32.h"
-using Base = cfw::Win32;
+namespace cfw {
+    using Window = cfw::Win32;
+};
 
 #endif
 

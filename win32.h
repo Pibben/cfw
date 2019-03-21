@@ -13,24 +13,29 @@
 #endif
 #include <windows.h>
 
-inline void sleep(const unsigned int milliseconds) {
-    Sleep(milliseconds);
-}
-
 namespace {
 constexpr unsigned int keyCodes[] = {
-        // clang-format off
-        VK_ESCAPE, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_PAUSE,
-        '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', VK_BACK, VK_INSERT, VK_HOME, VK_PRIOR,
-        VK_TAB, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', VK_DELETE, VK_END, VK_NEXT,
-        VK_CAPITAL, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', VK_RETURN,
-        VK_SHIFT, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', VK_SHIFT, VK_UP,
-        VK_CONTROL, VK_LWIN, VK_LMENU, VK_SPACE, VK_CONTROL, VK_RWIN, VK_APPS, VK_CONTROL, VK_LEFT, VK_DOWN, VK_RIGHT,
-        0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, VK_ADD, VK_SUBTRACT, VK_MULTIPLY, VK_DIVIDE
-        // clang-format on
+    // clang-format off
+    VK_ESCAPE, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_PAUSE,
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', VK_BACK, VK_INSERT, VK_HOME, VK_PRIOR,
+    VK_TAB, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', VK_DELETE, VK_END, VK_NEXT,
+    VK_CAPITAL, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', VK_RETURN,
+    VK_SHIFT, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', VK_SHIFT, VK_UP,
+    VK_CONTROL, VK_LWIN, VK_LMENU, VK_SPACE, VK_CONTROL, VK_RWIN, VK_APPS, VK_CONTROL, VK_LEFT, VK_DOWN, VK_RIGHT,
+    0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, VK_ADD, VK_SUBTRACT, VK_MULTIPLY, VK_DIVIDE
+    // clang-format on
 };
 
-class Win32 {
+}; //ns
+
+namespace cfw {
+
+inline void sleep(const unsigned int milliseconds) {
+  Sleep(milliseconds);
+}
+
+
+class Win32 : public WindowBase {
 
     bool mMouseIsTracked{};
     HANDLE mmEventThreadHandle{};
@@ -43,7 +48,7 @@ class Win32 {
     HDC mDeviceContextHandle{};
 
     static LRESULT APIENTRY handleEvents(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) {
-        auto* const disp = reinterpret_cast<Window*>(GetWindowLongPtr(window, GWLP_USERDATA));
+        auto* const disp = reinterpret_cast<Win32*>(GetWindowLongPtr(window, GWLP_USERDATA));
 
         // TODO: Create function in Display class to handle event. Improve
         // encapsulation.
@@ -142,7 +147,7 @@ class Win32 {
     }
 
     static DWORD WINAPI mEventThread(void* arg) {
-        auto* const disp = static_cast<Window*>((static_cast<void**>(arg))[0]);
+        auto* const disp = static_cast<Win32*>((static_cast<void**>(arg))[0]);
         const char* const title = static_cast<const char*>((static_cast<void**>(arg))[1]);
         MSG msg;
         delete[] static_cast<void**>(arg);  // NOLINT
@@ -259,7 +264,25 @@ class Win32 {
         paint();
     }
 
+    void setKey(const unsigned int keycode, const bool isPressed = true) {
+      if (mKeyboardCallback) {
+        for (int i = 0; i < static_cast<int>(Keys::NUM_KEYS); ++i) {
+          if (keyCodes[i] == keycode) {
+            mKeyboardCallback(static_cast<Keys>(i), isPressed);
+          }
+        }
+      }
+    }
+
 public:  // WINDOWS
+    Win32(const unsigned int width, const unsigned int height, const char* const title = nullptr)
+        : WindowBase(width, height, title) {
+        constructImpl(width, height, title);
+    }
+    ~Win32() {
+        destructImpl();
+    }
+
     void show() {
         if (!mIsHidden) {
             return;
