@@ -357,4 +357,7 @@ public:  // WINDOWS
 
 };
 
+#undef far
+#undef near
+
 #endif //CFW_WIN32_H
